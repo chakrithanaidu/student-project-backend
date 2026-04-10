@@ -1,11 +1,14 @@
 package com.example.studentbackend;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "https://student-project-frontend.netlify.app")
 @RestController
 @RequestMapping("/students")
 public class StudentController {
@@ -19,50 +22,72 @@ public class StudentController {
         return studentRepository.findAll();
     }
 
-    // Add a new student
+    // Add new student
     @PostMapping
     public Student createStudent(@RequestBody Student student) {
         return studentRepository.save(student);
     }
 
-    // Update a student
+    // Update student
     @PutMapping("/{id}")
-    public Student updateStudent(@PathVariable Long id, @RequestBody Student updatedStudent) {
-        return studentRepository.findById(id)
-                .map(student -> {
-                    student.setName(updatedStudent.getName());
-                    student.setRollNumber(updatedStudent.getRollNumber());
-                    return studentRepository.save(student);
-                })
-                .orElseThrow(() -> new RuntimeException("Student not found with id: " + id));
+    public ResponseEntity<?> updateStudent(@PathVariable Long id, @RequestBody Student updatedStudent) {
+        Optional<Student> optionalStudent = studentRepository.findById(id);
+
+        if (optionalStudent.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Student not found with id: " + id);
+        }
+
+        Student student = optionalStudent.get();
+        student.setName(updatedStudent.getName());
+        student.setRollNumber(updatedStudent.getRollNumber());
+
+        return ResponseEntity.ok(studentRepository.save(student));
     }
 
-    // Delete a student
+    // Delete student
     @DeleteMapping("/{id}")
-    public String deleteStudent(@PathVariable Long id) {
+    public ResponseEntity<String> deleteStudent(@PathVariable Long id) {
+        if (!studentRepository.existsById(id)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Student not found with id: " + id);
+        }
+
         studentRepository.deleteById(id);
-        return "Deleted student with id " + id;
+        return ResponseEntity.ok("Deleted student with id " + id);
     }
 
-    // 🔍 Search student by roll number (Query Parameter)
+    // Search student (FIXED - no generics error)
     @GetMapping("/search")
-    public List<Student> searchStudent(
+    public ResponseEntity<?> searchStudent(
             @RequestParam(required = false) String rollNumber,
             @RequestParam(required = false) Long id) {
 
+        // Search by roll number
         if (rollNumber != null) {
             List<Student> students = studentRepository.findByRollNumber(rollNumber);
-            if (students.isEmpty()) {
-                throw new RuntimeException("No students found with roll number: " + rollNumber);
-            }
-            return students;
-        } else if (id != null) {
-            return studentRepository.findById(id)
-                    .map(List::of)
-                    .orElseThrow(() -> new RuntimeException("No student found with id: " + id));
-        } else {
-            throw new RuntimeException("Please provide either rollNumber or id as a query parameter");
-        }
-    }
 
+            if (students.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("No students found with roll number: " + rollNumber);
+            }
+
+            return ResponseEntity.ok(students);
+        }
+
+        // Search by ID (FIXED PROPERLY)
+        if (id != null) {
+            Optional<Student> student = studentRepository.findById(id);
+
+            if (student.isPresent()) {
+                return ResponseEntity.ok(student.get());
+            } else {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("No student found with id: " + id);
+            }
+        }
+
+        return ResponseEntity.badRequest()
+                .body("Please provide rollNumber or id");
+    }
 }
